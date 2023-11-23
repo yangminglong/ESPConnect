@@ -19,20 +19,25 @@
 #include "ESPAsyncWebServer.h"
 #include "DNSServer.h"
 #include "espconnect_webpage.h"
+#include <functional>
 
 /* Library Default Settings */
-#define ESPCONNECT_DEBUG 1
-
-#define DEFAULT_CONNECTION_TIMEOUT 30000
-#define DEFAULT_PORTAL_TIMEOUT 180000
+#define ESPCONNECT_DEBUG 0
 
 
 #if ESPCONNECT_DEBUG == 1
   #define ESPCONNECT_SERIAL(x) Serial.print("[ESPConnect]["+String(millis())+"] "+x)
+  #define ESPCONNECT_SERIALP(x) Serial.print(x)
 #else
   #define ESPCONNECT_SERIAL(x)
+  #define ESPCONNECT_SERIALP(x)
 #endif
 
+#define DEFAULT_AP_SSID "AP_12345678"
+#define DEFAULT_AP_PSWD ""
+
+#define WIFI_CHECK_INTERVAL_SHORT 1000
+#define WIFI_CHECK_INTERVAL_LONG 3000
 
 class ESPConnectClass {
 
@@ -40,29 +45,30 @@ class ESPConnectClass {
     DNSServer* _dns = nullptr;
     AsyncWebServer* _server = nullptr;
 
-    String _auto_connect_ssid = "";
-    String _auto_connect_password = "";
-    unsigned long _auto_connect_timeout = DEFAULT_PORTAL_TIMEOUT;
+    String _auto_connect_ssid = DEFAULT_AP_SSID;
+    String _auto_connect_password = DEFAULT_AP_PSWD;
 
     String _sta_ssid = "";
     String _sta_password = "";
 
+    bool m_isAPActive = false;
+    uint8_t m_oldStatu = WL_DISCONNECTED;
+
   private:
     void load_sta_credentials();
 
-    // Start Captive portal
-    bool start_portal();
+    void initResponse();
 
+    void activeAP_DNS();
 
+    void stopAP_DNS();
   public:
-    // Check if ESPConnect was configured before
-    bool isConfigured();
-
     // Set Custom AP
-    void autoConnect(const char* ssid, const char* password = "", unsigned long timeout = DEFAULT_PORTAL_TIMEOUT);
+    void initAPInfo(const char* ssid = DEFAULT_AP_SSID, const char* password = DEFAULT_AP_PSWD);
 
-    // Connect to Saved WiFi Credentials
-    bool begin(AsyncWebServer* server, unsigned long timeout = DEFAULT_CONNECTION_TIMEOUT);
+    void setup(AsyncWebServer* server);
+
+    void loop();
 
     // Erase Saved WiFi Credentials
     bool erase();
