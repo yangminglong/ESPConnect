@@ -1,9 +1,15 @@
 #include "ESPConnect.h"
+#include <esp_log.h>
+
+#define TAG "Conn"
 
 void ESPConnectClass::initResponse() 
 {
+  ESP_LOGI(TAG, "initResponse");
   _server->on("/espconnect/scan", HTTP_GET, [&](AsyncWebServerRequest *request)
   {
+    m_canConnectWifi = false;
+    ESP_LOGI(TAG, "api /espconnect/scan");
     String json = "[";
     int n = WiFi.scanComplete();
     if(n == WIFI_SCAN_FAILED)
@@ -45,6 +51,8 @@ void ESPConnectClass::initResponse()
   // Accept incomming WiFi Credentials
   _server->on("/espconnect/connect", HTTP_POST, [&](AsyncWebServerRequest *request)
   {
+    m_canConnectWifi = false;
+    ESP_LOGI(TAG, "api /espconnect/connect");
     // Get FormData
     String ssid = request->hasParam("ssid", true) ? request->getParam("ssid", true)->value().c_str() : "";
     String password = request->hasParam("password", true) ? request->getParam("password", true)->value().c_str() : "";
@@ -80,7 +88,7 @@ void ESPConnectClass::initResponse()
     #endif
         _sta_ssid = ssid;
         _sta_password = password;
-        WiFi.begin(_sta_ssid.c_str(), _sta_password.c_str());
+        m_canConnectWifi = true;
         request->send(200, "application/json", "{\"message\":\"Credentials Saved. Rebooting...\"}");
       }else{
         ESPCONNECT_SERIAL(String("WiFi config failed with:")+String(ok)+"\n");
@@ -90,6 +98,8 @@ void ESPConnectClass::initResponse()
   
   _server->on("/espconnect", HTTP_GET, [&](AsyncWebServerRequest *request)
   {
+    m_canConnectWifi = false;
+    ESP_LOGI(TAG, "api /espconnect");
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", ESPCONNECT_HTML, ESPCONNECT_HTML_SIZE);
     response->addHeader("Content-Encoding", "gzip");
     request->send(response);
@@ -100,7 +110,9 @@ void ESPConnectClass::initResponse()
   Loads STA Credentials into memory
 */
 
-void ESPConnectClass::load_sta_credentials(){
+void ESPConnectClass::load_sta_credentials()
+{
+  ESP_LOGI(TAG, "load_sta_credentials");
   // Get saved WiFi Credentials
   #if defined(ESP8266)
     station_config config = {};
@@ -123,24 +135,27 @@ void ESPConnectClass::load_sta_credentials(){
 
 void ESPConnectClass::activeAP_DNS()
 {
-    WiFi.mode(WIFI_AP_STA);
-    // Start Access Point
-    WiFi.softAP(_auto_connect_ssid.c_str(), _auto_connect_password.c_str());
-    
-    if (_dns) {
-      _dns->stop();
-      delete _dns;
-    }
+  ESP_LOGI(TAG, "activeAP_DNS");
 
-    _dns = new DNSServer();
-    _dns->setErrorReplyCode(DNSReplyCode::NoError);
-    _dns->start(53, "*", WiFi.softAPIP());
+  WiFi.mode(WIFI_AP_STA);
+  // Start Access Point
+  WiFi.softAP(_auto_connect_ssid.c_str(), _auto_connect_password.c_str());
+  
+  if (_dns) {
+    _dns->stop();
+    delete _dns;
+  }
 
-    m_isAPActive = true;
+  _dns = new DNSServer();
+  _dns->setErrorReplyCode(DNSReplyCode::NoError);
+  _dns->start(53, "*", WiFi.softAPIP());
+
+  m_isAPActive = true;
 }
 
 void ESPConnectClass::stopAP_DNS()
 {
+  ESP_LOGI(TAG, "stopAP_DNS");
   if (_dns) {
     _dns->stop();
     delete _dns;
@@ -160,6 +175,7 @@ void ESPConnectClass::stopAP_DNS()
 
 void ESPConnectClass::setup(AsyncWebServer* server)
 {
+  ESP_LOGI(TAG, "setup");
   _server = server;
 
   initResponse();
@@ -179,26 +195,48 @@ void ESPConnectClass::setup(AsyncWebServer* server)
 
 unsigned long wifiCheckInterval = WIFI_CHECK_INTERVAL_SHORT;
 unsigned long wifiCheckPrevTime = 0;
+
+unsigned long wifiReconnInterval = 20000;
+unsigned long wifiReconnPrevTime = 0;
+
 bool needActiveAP = false;
+int connectedSecs = 0;
 
 void ESPConnectClass::loop()
 {
+  if (_dns) {
+    _dns->processNextRequest();
+    yield();
+  }
   if (millis() - wifiCheckPrevTime > wifiCheckInterval) {
+    ESP_LOGI(TAG, "loop");
     wifiCheckPrevTime = millis();
 
     uint8_t statu = WiFi.status();
     if (statu == WL_CONNECTED) {
+      ESP_LOGI(TAG, "is connected");
+      connectedSecs++;
+      if (connectedSecs > 20) {
+        erase();
+      }
       needActiveAP = false;
       if (m_isAPActive) {
         stopAP_DNS();
         wifiCheckInterval = WIFI_CHECK_INTERVAL_LONG;
       }
     } else if (needActiveAP && m_isAPActive == false) {
+        ESP_LOGI(TAG, "reopen AP");
         needActiveAP = false;
         activeAP_DNS();
         wifiCheckInterval = WIFI_CHECK_INTERVAL_SHORT;
     } else {
-      bool isSTAConnected = WiFi.begin(_sta_ssid.c_str(), _sta_password.c_str()) == WL_CONNECTED;
+      connectedSecs = 0;
+      bool isSTAConnected = false;
+      if (millis() - wifiReconnPrevTime > wifiReconnInterval && m_canConnectWifi) {
+        ESP_LOGI(TAG, "reconnect sta.");
+        wifiReconnPrevTime = millis();
+        isSTAConnected = WiFi.begin(_sta_ssid.c_str(), _sta_password.c_str()) == WL_CONNECTED;
+      }
       if (isSTAConnected == false && m_isAPActive == false) {
         needActiveAP = true;
         wifiCheckInterval = WIFI_CHECK_INTERVAL_LONG;
@@ -211,6 +249,7 @@ void ESPConnectClass::loop()
   Set Custom AP Credentials
 */
 void ESPConnectClass::initAPInfo(const char* ssid, const char* password){
+  ESP_LOGI(TAG, "initAPInfo");
   _auto_connect_ssid = ssid;
   _auto_connect_password = password;
 }

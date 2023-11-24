@@ -52,6 +52,7 @@ class ESPConnectClass {
     String _sta_password = "";
 
     bool m_isAPActive = false;
+    bool m_canConnectWifi = true;
     uint8_t m_oldStatu = WL_DISCONNECTED;
 
   private:
