@@ -10,6 +10,7 @@
 */
 
 #include <Arduino.h>
+
 #if defined(ESP8266)
   /* ESP8266 Dependencies */
   #include <ESP8266WiFi.h>
@@ -20,12 +21,14 @@
   #include <WiFi.h>
   #include <AsyncTCP.h>
   #include <ESPAsyncWebServer.h>
+  #include <esp_log.h>
 #endif
 #include <ESPConnect.h>
 
+#define TAG "main"
 AsyncWebServer server(80);
 
-const char * eventName(arduino_event_id_t id) {
+String eventName(arduino_event_id_t id) {
     switch(id) {
         case ARDUINO_EVENT_WIFI_READY: return "WIFI_READY";
         case ARDUINO_EVENT_WIFI_SCAN_DONE: return "SCAN_DONE";
@@ -68,22 +71,23 @@ const char * eventName(arduino_event_id_t id) {
         case ARDUINO_EVENT_PROV_CRED_RECV: return "PROV_CRED_RECV";
         case ARDUINO_EVENT_PROV_CRED_FAIL: return "PROV_CRED_FAIL";
         case ARDUINO_EVENT_PROV_CRED_SUCCESS: return "PROV_CRED_SUCCESS";
-        default: return "";
+        default: return "Unkonw ID" + String(id);
     }
 }
 
-void setup(){
-  Serial.begin(115200);
-  Serial.println();
+void setup() { 
+  ESP_LOGI(TAG, "Setup..");
+
+  delay(1000);
 
   WiFi.onEvent([](arduino_event_id_t event, arduino_event_info_t info){
-    Serial.println(eventName(event));
+    ESP_LOGI(TAG, "Event:", eventName(event));
   });
   /*
     AutoConnect AP
     Configure SSID and password for Captive Portal
   */
-  ESPConnect.initAPInfo("ESPConfig");
+  ESPConnect.initAPInfo("AP_ESPConfig");
 
   ESPConnect.setup(&server);
 

@@ -39,6 +39,8 @@
 #define WIFI_CHECK_INTERVAL_SHORT 1000
 #define WIFI_CHECK_INTERVAL_LONG 3000
 
+#define STOP_AP_INTERVAL 300000
+
 class ESPConnectClass {
 
   private:
@@ -52,9 +54,13 @@ class ESPConnectClass {
     String _sta_password = "";
 
     bool m_isAPActive = false;
-    bool m_canConnectWifi = true;
+    bool m_needActiveAP = false;
     uint8_t m_oldStatu = WL_DISCONNECTED;
+    bool m_scanning = false;
+    bool m_connectReq = false;
+    unsigned long m_timeOfWiFiConnected = 0;
 
+     unsigned long m_timeOfLastScan = 0;
   private:
     void load_sta_credentials();
 
